@@ -105,21 +105,21 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
       gateGraphicsRef.current = gateGraphics;
       pixiApp.stage.addChild(gateGraphics);
 
-      // Create destructible bricks
+      // СЕКЦИЯ 1: Первый уровень препятствий (кирпичики)
       const bricks = [];
-      for (let row = 0; row < 6; row++) {
-        for (let col = 0; col < 8; col++) {
-          const x = 60 + col * 30 + (row % 2) * 15;
-          const y = 200 + row * 40;
+      for (let row = 0; row < 4; row++) {
+        for (let col = 0; col < 7; col++) {
+          const x = 70 + col * 35 + (row % 2) * 17;
+          const y = 180 + row * 30;
           
-          const brick = Matter.Bodies.rectangle(x, y, 25, 15, {
+          const brick = Matter.Bodies.rectangle(x, y, 30, 12, {
             isStatic: true,
             restitution: 0.9,
             render: { fillStyle: '#8B4513' }
           });
 
           const brickGraphics = new PIXI.Graphics();
-          brickGraphics.roundRect(x - 12.5, y - 7.5, 25, 15, 3);
+          brickGraphics.roundRect(x - 15, y - 6, 30, 12, 4);
           brickGraphics.fill(0x8B4513);
           brickGraphics.stroke({ width: 1, color: 0x654321 });
           pixiApp.stage.addChild(brickGraphics);
@@ -136,25 +136,49 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
         }
       }
 
-      // Create spinning obstacles (crosses)
+      // СЕКЦИЯ 2: Средний уровень с пинболами
+      const pegs = [];
+      for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 5; col++) {
+          const x = 90 + col * 40 + (row % 2) * 20;
+          const y = 320 + row * 50;
+          const peg = Matter.Bodies.circle(x, y, 10, {
+            isStatic: true,
+            restitution: 1.1,
+            render: { fillStyle: '#4A90E2' }
+          });
+          pegs.push(peg);
+
+          // Draw peg
+          const pegGraphics = new PIXI.Graphics();
+          pegGraphics.circle(x, y, 10);
+          pegGraphics.fill(0x4A90E2);
+          pegGraphics.stroke({ width: 2, color: 0x357ABD });
+          pixiApp.stage.addChild(pegGraphics);
+        }
+      }
+
+      // СЕКЦИЯ 3: Вращающиеся препятствия (крестики)
       const spinners = [];
       const spinnerPositions = [
-        { x: 100, y: 450 },
-        { x: 180, y: 420 },
-        { x: 260, y: 450 }
+        { x: 100, y: 500 },
+        { x: 180, y: 480 },
+        { x: 260, y: 500 },
+        { x: 140, y: 530 },
+        { x: 220, y: 530 }
       ];
 
       spinnerPositions.forEach((pos, index) => {
-        const spinner = Matter.Bodies.rectangle(pos.x, pos.y, 30, 6, {
+        const spinner = Matter.Bodies.rectangle(pos.x, pos.y, 40, 8, {
           isStatic: true,
-          restitution: 1.2,
+          restitution: 1.3,
           render: { fillStyle: '#FFD700' }
         });
 
         const spinnerGraphics = new PIXI.Graphics();
         // Draw cross shape
-        spinnerGraphics.rect(-15, -3, 30, 6);
-        spinnerGraphics.rect(-3, -15, 6, 30);
+        spinnerGraphics.rect(-20, -4, 40, 8);
+        spinnerGraphics.rect(-4, -20, 8, 40);
         spinnerGraphics.fill(0xFFD700);
         spinnerGraphics.stroke({ width: 2, color: 0xFFA500 });
         spinnerGraphics.position.set(pos.x, pos.y);
@@ -171,8 +195,39 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
         spinnersRef.current.push(spinnerObj);
       });
 
-      // Create winning slot (center only, smaller)
-      const winSlot = Matter.Bodies.rectangle(180, 580, 40, 20, {
+      // СЕКЦИЯ 4: Финальная зона
+      // Создаем направляющие воронки
+      const funnelLeft = Matter.Bodies.rectangle(150, 600, 60, 8, {
+        isStatic: true,
+        angle: Math.PI / 6,
+        restitution: 0.8,
+        render: { fillStyle: '#666666' }
+      });
+      
+      const funnelRight = Matter.Bodies.rectangle(210, 600, 60, 8, {
+        isStatic: true,
+        angle: -Math.PI / 6,
+        restitution: 0.8,
+        render: { fillStyle: '#666666' }
+      });
+
+      // Draw funnels
+      const funnelLeftGraphics = new PIXI.Graphics();
+      funnelLeftGraphics.rect(-30, -4, 60, 8);
+      funnelLeftGraphics.fill(0x666666);
+      funnelLeftGraphics.position.set(150, 600);
+      funnelLeftGraphics.rotation = Math.PI / 6;
+      pixiApp.stage.addChild(funnelLeftGraphics);
+
+      const funnelRightGraphics = new PIXI.Graphics();
+      funnelRightGraphics.rect(-30, -4, 60, 8);
+      funnelRightGraphics.fill(0x666666);
+      funnelRightGraphics.position.set(210, 600);
+      funnelRightGraphics.rotation = -Math.PI / 6;
+      pixiApp.stage.addChild(funnelRightGraphics);
+
+      // Победная полоска (центр)
+      const winSlot = Matter.Bodies.rectangle(180, 650, 60, 15, {
         isStatic: true,
         isSensor: true,
         render: { fillStyle: '#00FF00' }
@@ -180,26 +235,32 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
 
       // Draw winning slot
       const winSlotGraphics = new PIXI.Graphics();
-      winSlotGraphics.roundRect(160, 570, 40, 20, 10);
+      winSlotGraphics.roundRect(150, 642, 60, 15, 8);
       winSlotGraphics.fill(0x00FF00);
-      winSlotGraphics.stroke({ width: 2, color: 0x00AA00 });
+      winSlotGraphics.stroke({ width: 3, color: 0x00AA00 });
       pixiApp.stage.addChild(winSlotGraphics);
+
+      // Add pulsing glow effect to win slot
+      const winGlowGraphics = new PIXI.Graphics();
+      winGlowGraphics.roundRect(145, 637, 70, 25, 12);
+      winGlowGraphics.fill({ color: 0x00FF00, alpha: 0.3 });
+      pixiApp.stage.addChild(winGlowGraphics);
 
       // Add win text
       const winText = new PIXI.Text({
-        text: 'WIN',
+        text: 'ПОБЕДА!',
         style: {
-          fontSize: 12,
+          fontSize: 14,
           fill: 0x000000,
           fontWeight: 'bold'
         }
       });
       winText.anchor.set(0.5);
-      winText.position.set(180, 580);
+      winText.position.set(180, 650);
       pixiApp.stage.addChild(winText);
 
       // Add all bodies to world
-      Matter.World.add(matterEngine.world, [ground, leftDeathZone, rightDeathZone, gate, ...bricks, ...spinners, winSlot]);
+      Matter.World.add(matterEngine.world, [ground, leftDeathZone, rightDeathZone, gate, ...bricks, ...pegs, ...spinners, funnelLeft, funnelRight, winSlot]);
 
       // Setup collision detection
       Matter.Events.on(matterEngine, 'collisionStart', (event) => {
@@ -244,22 +305,31 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
         
         // Update ball graphics positions and camera follow
         if (ballsRef.current.length > 0) {
-          const firstBall = ballsRef.current[0];
-          const targetCameraY = Math.max(0, firstBall.body.position.y - 320);
-          setCameraY(targetCameraY);
-          pixiApp.stage.y = -targetCameraY;
+          const activeBalls = ballsRef.current.filter(ball => ball.body && !ball.isSpinning);
+          if (activeBalls.length > 0) {
+            const firstBall = activeBalls[0];
+            const targetCameraY = Math.max(0, Math.min(400, firstBall.body.position.y - 200));
+            
+            // Smooth camera movement
+            const currentCameraY = -pixiApp.stage.y;
+            const newCameraY = currentCameraY + (targetCameraY - currentCameraY) * 0.02;
+            setCameraY(newCameraY);
+            pixiApp.stage.y = -newCameraY;
+          }
         }
         
         // Update ball graphics positions
         ballsRef.current.forEach((ball, index) => {
-          if (gameState === 'spinning') {
-            // Spinning animation
-            ball.graphics.rotation += 0.1;
+          if (gameState === 'spinning' || ball.isSpinning) {
+            // Spinning animation - balls rotate around center
+            const angle = (Date.now() * 0.005) + (index * (Math.PI * 2) / ballsRef.current.length);
+            const radius = 40;
             ball.graphics.position.set(
-              180 + Math.cos(Date.now() * 0.01 + index) * 30,
-              80
+              180 + Math.cos(angle) * radius,
+              80 + Math.sin(angle) * radius * 0.3
             );
-          } else {
+            ball.graphics.rotation += 0.15;
+          } else if (ball.body) {
             ball.graphics.position.set(ball.body.position.x, ball.body.position.y);
             ball.graphics.rotation = ball.body.angle;
           }
@@ -267,7 +337,7 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
 
         // Update spinner rotations
         spinnersRef.current.forEach(spinner => {
-          spinner.rotation += 0.05;
+          spinner.rotation += 0.08;
           spinner.graphics.rotation = spinner.rotation;
           Matter.Body.setAngle(spinner.body, spinner.rotation);
         });
