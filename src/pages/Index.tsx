@@ -75,6 +75,7 @@ const Index = () => {
               <Trophy className="w-4 h-4 mr-2" />
               Режимы
             </TabsTrigger>
+
             <TabsTrigger value="stats" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-accent data-[state=active]:to-primary">
               <Star className="w-4 h-4 mr-2" />
               Статистика

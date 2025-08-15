@@ -1,5 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import * as PIXI from "pixi.js";
+import { AVAILABLE_MAPS, Obstacle, Spinner } from "./maps";
+
+// Import images
+import img1 from '../assets/photo_2019-09-19_15-45-07.jpg';
+import img2 from '../assets/photo_2023-12-17_21-03-10.jpg';
+import img3 from '../assets/photo_2023-12-18_11-45-15.jpg';
+import img4 from '../assets/photo_2024-08-14_17-20-47.jpg';
+import img5 from '../assets/photo_2024-09-02_18-24-24.jpg';
+import img6 from '../assets/photo_2025-02-21_14-40-21.jpg';
+import img7 from '../assets/photo_2025-06-22_14-19-23.jpg';
+import img8 from '../assets/photo_2025-07-12_13-49-29.jpg';
+import img9 from '../assets/photo_2025-08-04_22-56-18.jpg';
 
 interface Ball {
   id: string;
@@ -11,24 +23,7 @@ interface Ball {
   color: number;
   playerId: string;
   finished?: boolean;
-}
-
-interface Obstacle {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  type: 'peg' | 'brick' | 'spinner' | 'barrier';
-  rotation?: number;
-  destroyed?: boolean;
-  graphics?: PIXI.Graphics;
-}
-
-interface Spinner {
-  x: number;
-  y: number;
-  rotation: number;
-  graphics: PIXI.Graphics;
+  indicator?: PIXI.Graphics;
 }
 
 interface GameCanvasProps {
@@ -49,6 +44,10 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
   const [actualWinners, setActualWinners] = useState<string[]>([]);
   const actualWinnersRef = useRef<string[]>([]);
   const rngRef = useRef<(() => number) | null>(null);
+  const [selectedMapId, setSelectedMapId] = useState<string>('classic');
+  const [playerCount, setPlayerCount] = useState<number>(17);
+  const texturesRef = useRef<PIXI.Texture[]>([]);
+
   
   // Seeded random number generator
   const createRNG = (seed: string) => {
@@ -81,176 +80,31 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
 
       canvasRef.current!.appendChild(pixiApp.canvas);
 
-      // Create obstacles array
-      const obstacles: Obstacle[] = [];
 
-      // Create walls (for collision detection)
-      obstacles.push(
-        { x: 10, y: 1600, width: 20, height: 3200, type: 'barrier' },
-        { x: 790, y: 1600, width: 20, height: 3200, type: 'barrier' }
-      );
 
-      // Draw walls
-      const leftWallGraphics = new PIXI.Graphics();
-      leftWallGraphics.rect(0, 0, 20, 3200);
-      leftWallGraphics.fill(0x16213e);
-      pixiApp.stage.addChild(leftWallGraphics);
-
-      const rightWallGraphics = new PIXI.Graphics();
-      rightWallGraphics.rect(780, 0, 20, 3200);
-      rightWallGraphics.fill(0x16213e);
-      pixiApp.stage.addChild(rightWallGraphics);
-
-      // Draw gate (visual only)
-      const gateGraphics = new PIXI.Graphics();
-      gateGraphics.rect(300, 142, 200, 15);
-      gateGraphics.fill(0x666666);
-      pixiApp.stage.addChild(gateGraphics);
-
-      // СЕКЦИЯ 1: Первый уровень препятствий (кирпичики)
-      for (let row = 0; row < 8; row++) {
-        for (let col = 0; col < 15; col++) {
-          const x = 80 + col * 45 + (row % 2) * 22;
-          const y = 250 + row * 40;
-          
-          const brickGraphics = new PIXI.Graphics();
-          brickGraphics.roundRect(x - 20, y - 7, 40, 15, 4);
-          brickGraphics.fill(0x8B4513);
-          brickGraphics.stroke({ width: 1, color: 0x654321 });
-          pixiApp.stage.addChild(brickGraphics);
-          
-          obstacles.push({ x, y, width: 40, height: 15, type: 'brick', destroyed: false, graphics: brickGraphics });
-        }
+      // Load ball textures
+      try {
+        const imageFiles = [img1, img2, img3, img4, img5, img6, img7, img8, img9];
+        const textures = await Promise.all(
+          imageFiles.map(async (imgSrc) => {
+            return await PIXI.Assets.load(imgSrc);
+          })
+        );
+        texturesRef.current = textures;
+      } catch (error) {
+        console.warn('Failed to load images:', error);
+        texturesRef.current = [];
       }
 
-      // СЕКЦИЯ 2: Средний уровень с пинболами
-      for (let row = 0; row < 6; row++) {
-        for (let col = 0; col < 12; col++) {
-          const x = 100 + col * 55 + (row % 2) * 27;
-          const y = 700 + row * 70;
-          
-          obstacles.push({ x, y, width: 24, height: 24, type: 'peg' });
-
-          const pegGraphics = new PIXI.Graphics();
-          pegGraphics.circle(x, y, 12);
-          pegGraphics.fill(0x4A90E2);
-          pegGraphics.stroke({ width: 2, color: 0x357ABD });
-          pixiApp.stage.addChild(pegGraphics);
-        }
-      }
-
-      // СЕКЦИЯ 2.5: Лабиринт
-      const mazeBarriers = [
-        { x: 100, y: 1100, width: 80, height: 15 },
-        { x: 300, y: 1150, width: 80, height: 15 },
-        { x: 150, y: 1200, width: 80, height: 15 },
-        { x: 350, y: 1250, width: 80, height: 15 },
-        { x: 120, y: 1300, width: 80, height: 15 },
-        { x: 320, y: 1350, width: 80, height: 15 }
-      ];
+      // Clear all previous graphics from stage
+      pixiApp.stage.removeChildren();
       
-      mazeBarriers.forEach(barrier => {
-        obstacles.push({ x: barrier.x, y: barrier.y, width: barrier.width, height: barrier.height, type: 'barrier' });
-        
-        const barrierGraphics = new PIXI.Graphics();
-        barrierGraphics.roundRect(barrier.x - barrier.width/2, barrier.y - barrier.height/2, barrier.width, barrier.height, 4);
-        barrierGraphics.fill(0x9B59B6);
-        barrierGraphics.stroke({ width: 2, color: 0x7B4397 });
-        pixiApp.stage.addChild(barrierGraphics);
-      });
-
-      // СЕКЦИЯ 3: Вращающиеся препятствия (крестики)
-      const spinnerPositions = [
-        { x: 150, y: 1400 }, { x: 300, y: 1380 }, { x: 450, y: 1400 }, { x: 600, y: 1380 },
-        { x: 200, y: 1500 }, { x: 350, y: 1480 }, { x: 500, y: 1500 }, { x: 650, y: 1480 },
-        { x: 120, y: 1600 }, { x: 280, y: 1580 }, { x: 420, y: 1600 }, { x: 580, y: 1580 },
-        { x: 180, y: 1700 }, { x: 340, y: 1680 }, { x: 480, y: 1700 }, { x: 620, y: 1680 }
-      ];
-
-      spinnerPositions.forEach((pos, index) => {
-        obstacles.push({ x: pos.x, y: pos.y, width: 60, height: 60, type: 'spinner' });
-
-        const spinnerGraphics = new PIXI.Graphics();
-        spinnerGraphics.rect(-30, -6, 60, 12);
-        spinnerGraphics.rect(-6, -30, 12, 60);
-        spinnerGraphics.fill(0xFFD700);
-        spinnerGraphics.stroke({ width: 2, color: 0xFFA500 });
-        spinnerGraphics.position.set(pos.x, pos.y);
-        pixiApp.stage.addChild(spinnerGraphics);
-
-        spinnersRef.current.push({
-          x: pos.x,
-          y: pos.y,
-          rotation: 0,
-          graphics: spinnerGraphics
-        });
-      });
-
-      // СЕКЦИЯ 4: Последние препятствия
-      for (let row = 0; row < 4; row++) {
-        for (let col = 0; col < 10; col++) {
-          const x = 120 + col * 60 + (row % 2) * 30;
-          const y = 2200 + row * 80;
-          
-          obstacles.push({ x, y, width: 30, height: 30, type: 'peg' });
-
-          const pegGraphics = new PIXI.Graphics();
-          pegGraphics.circle(x, y, 15);
-          pegGraphics.fill(0xE74C3C);
-          pegGraphics.stroke({ width: 3, color: 0xC0392B });
-          pixiApp.stage.addChild(pegGraphics);
-        }
-      }
-
-      // СЕКЦИЯ 5: Финальная зона (воронки как барьеры)
-      const funnelBarriers = [
-        { x: 250, y: 2850, width: 120, height: 20 },
-        { x: 550, y: 2850, width: 120, height: 20 }
-      ];
+      // Load selected map
+      const selectedMap = AVAILABLE_MAPS.find(map => map.id === selectedMapId) || AVAILABLE_MAPS[0];
+      const { obstacles, spinners } = selectedMap.createObstacles(pixiApp);
       
-      funnelBarriers.forEach(funnel => {
-        obstacles.push({ x: funnel.x, y: funnel.y, width: funnel.width, height: funnel.height, type: 'barrier' });
-        
-        const funnelGraphics = new PIXI.Graphics();
-        funnelGraphics.roundRect(funnel.x - funnel.width/2, funnel.y - funnel.height/2, funnel.width, funnel.height, 4);
-        funnelGraphics.fill(0x666666);
-        funnelGraphics.stroke({ width: 3, color: 0x444444 });
-        pixiApp.stage.addChild(funnelGraphics);
-      });
-
-      // Store obstacles reference
       obstaclesRef.current = obstacles;
-
-      // Draw winning slot
-      const winSlotGraphics = new PIXI.Graphics();
-      winSlotGraphics.roundRect(340, 3085, 120, 30, 15);
-      winSlotGraphics.fill(0x00FF00);
-      winSlotGraphics.stroke({ width: 4, color: 0x00AA00 });
-      pixiApp.stage.addChild(winSlotGraphics);
-
-      // Draw death zones
-      const leftDeathGraphics = new PIXI.Graphics();
-      leftDeathGraphics.roundRect(30, 3185, 520, 30, 15);
-      leftDeathGraphics.fill(0xff3333);
-      pixiApp.stage.addChild(leftDeathGraphics);
-
-      const rightDeathGraphics = new PIXI.Graphics();
-      rightDeathGraphics.roundRect(540, 3185, 230, 30, 15);
-      rightDeathGraphics.fill(0xff3333);
-      pixiApp.stage.addChild(rightDeathGraphics);
-
-      // Add win text
-      const winText = new PIXI.Text({
-        text: 'ПОБЕДА!',
-        style: {
-          fontSize: 24,
-          fill: 0x000000,
-          fontWeight: 'bold'
-        }
-      });
-      winText.anchor.set(0.5);
-      winText.position.set(400, 3100);
-      pixiApp.stage.addChild(winText);
+      spinnersRef.current = spinners;
 
       // Custom physics update function
       const updateBalls = () => {
@@ -279,15 +133,15 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
             const dy = ball.y - obstacle.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
             
-            if (obstacle.type === 'peg' && distance < 18) {
+            if (obstacle.type === 'peg' && distance < 36) {
               // Bounce off peg - push ball away and add random bounce
               const angle = Math.atan2(dy, dx);
-              ball.x = obstacle.x + Math.cos(angle) * 18;
-              ball.y = obstacle.y + Math.sin(angle) * 18;
+              ball.x = obstacle.x + Math.cos(angle) * 36;
+              ball.y = obstacle.y + Math.sin(angle) * 36;
               
-              const bounce = (rngRef.current!() - 0.5) * 3;
-              ball.dx = Math.cos(angle) * 2 + bounce;
-              ball.dy = Math.abs(ball.dy) * 0.7;
+              const bounce = (rngRef.current!() - 0.5) * 4;
+              ball.dx = Math.cos(angle) * 3 + bounce;
+              ball.dy = Math.abs(ball.dy) * 0.8;
               collided = true;
             } else if (obstacle.type === 'brick' && 
                       Math.abs(dx) < obstacle.width / 2 && 
@@ -299,18 +153,18 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
               }
               ball.x = prevX;
               ball.y = prevY;
-              ball.dy *= -0.6;
-              ball.dx += (rngRef.current!() - 0.5) * 2;
+              ball.dy *= -0.8;
+              ball.dx += (rngRef.current!() - 0.5) * 3;
               collided = true;
-            } else if (obstacle.type === 'spinner' && distance < 35) {
+            } else if (obstacle.type === 'spinner' && distance < 60) {
               // Hit spinner - strong bounce away
               const angle = Math.atan2(dy, dx);
-              ball.x = obstacle.x + Math.cos(angle) * 35;
-              ball.y = obstacle.y + Math.sin(angle) * 35;
+              ball.x = obstacle.x + Math.cos(angle) * 60;
+              ball.y = obstacle.y + Math.sin(angle) * 60;
               
-              const bounce = (rngRef.current!() - 0.5) * 5;
-              ball.dx = Math.cos(angle) * 3 + bounce;
-              ball.dy = Math.abs(ball.dy) * 0.6;
+              const bounce = (rngRef.current!() - 0.5) * 6;
+              ball.dx = Math.cos(angle) * 4 + bounce;
+              ball.dy = Math.abs(ball.dy) * 0.7;
               collided = true;
             } else if (obstacle.type === 'barrier' && 
                       Math.abs(dx) < obstacle.width / 2 && 
@@ -321,25 +175,25 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
               
               if (overlapX < overlapY) {
                 // Hit from side
-                ball.x = dx > 0 ? obstacle.x + obstacle.width / 2 + 6 : obstacle.x - obstacle.width / 2 - 6;
-                ball.dx = -ball.dx * 0.8 + (rngRef.current!() - 0.5) * 1;
+                ball.x = dx > 0 ? obstacle.x + obstacle.width / 2 + 24 : obstacle.x - obstacle.width / 2 - 24;
+                ball.dx = -ball.dx * 0.9 + (rngRef.current!() - 0.5) * 2;
               } else {
                 // Hit from top/bottom
-                ball.y = dy > 0 ? obstacle.y + obstacle.height / 2 + 6 : obstacle.y - obstacle.height / 2 - 6;
-                ball.dy = -ball.dy * 0.8;
-                ball.dx += (rngRef.current!() - 0.5) * 1;
+                ball.y = dy > 0 ? obstacle.y + obstacle.height / 2 + 24 : obstacle.y - obstacle.height / 2 - 24;
+                ball.dy = -ball.dy * 0.9;
+                ball.dx += (rngRef.current!() - 0.5) * 2;
               }
               collided = true;
             }
           });
           
-          // Boundary checks
-          if (ball.x < 30) { ball.x = 30; ball.dx = Math.abs(ball.dx) * 0.5; }
-          if (ball.x > 420) { ball.x = 420; ball.dx = -Math.abs(ball.dx) * 0.5; }
+          // Boundary checks (увеличенный радиус)
+          if (ball.x < 54) { ball.x = 54; ball.dx = Math.abs(ball.dx) * 0.7; }
+          if (ball.x > 396) { ball.x = 396; ball.dx = -Math.abs(ball.dx) * 0.7; }
           
-          // Check win/death zones
+          // Check win/death zones - обновленная расширенная зона
           if (ball.y > 3085 && ball.y < 3115) {
-            if (ball.x > 340 && ball.x < 460 && !actualWinnersRef.current.includes(ball.id)) {
+            if (ball.x > 320 && ball.x < 480 && !actualWinnersRef.current.includes(ball.id)) {
               // Win zone
               actualWinnersRef.current = [...actualWinnersRef.current, ball.id];
               setActualWinners(actualWinnersRef.current);
@@ -363,6 +217,11 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
           
           // Update graphics
           ball.graphics.position.set(ball.x, ball.y);
+          
+          // Update indicator position if exists
+          if (ball.indicator) {
+            ball.indicator.position.set(ball.x, ball.y - 40);
+          }
         });
         
         // Remove finished balls
@@ -377,16 +236,28 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
         }
         
         // Scale and center the game field
-        const scale = 385 / 800;
+        const scale = 450 / 800;
         pixiApp.stage.scale.set(scale);
         
-        // Camera follow
+        // Camera follow and leader indicator
         if (ballsRef.current.length > 0) {
           const activeBalls = ballsRef.current.filter(ball => !ball.finished);
           if (activeBalls.length > 0) {
             const leadingBall = activeBalls.reduce((leader, ball) => 
               ball.y > leader.y ? ball : leader
             );
+            
+            // Update leader indicators
+            ballsRef.current.forEach(ball => {
+              if (ball.indicator) {
+                if (ball === leadingBall && !ball.finished) {
+                  ball.indicator.visible = true;
+                } else {
+                  ball.indicator.visible = false;
+                }
+              }
+            });
+            
             const targetCameraY = Math.max(0, Math.min(2200 * scale, leadingBall.y * scale - 320));
             
             const currentCameraY = -pixiApp.stage.y;
@@ -418,7 +289,7 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
         canvasRef.current.removeChild(canvasRef.current.firstChild);
       }
     };
-  }, []);
+  }, [selectedMapId]);
 
   const startRound = (playerCount: number = 50, seed: string = Date.now().toString()) => {
     if (!app) return;
@@ -432,21 +303,42 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
     actualWinnersRef.current = [];
     ballsRef.current.forEach(ball => {
       app.stage.removeChild(ball.graphics);
+      if (ball.indicator) {
+        app.stage.removeChild(ball.indicator);
+      }
     });
 
-    const colors = [0xff6b6b, 0x4ecdc4, 0x45b7d1, 0xf9ca24, 0xf0932b, 0xeb4d4b, 0x9b59b6, 0xe67e22, 0x2ecc71, 0x34495e];
 
-    // Create balls with deterministic positioning
+
+    // Create balls with deterministic positioning (увеличенный размер в 4 раза)
+    const colors = [0xff6b6b, 0x4ecdc4, 0x45b7d1, 0xf9ca24, 0xf0932b, 0xeb4d4b, 0x9b59b6, 0xe67e22, 0x2ecc71];
     const newBalls: Ball[] = [];
     for (let i = 0; i < playerCount; i++) {
       const color = colors[i % colors.length];
-      const ballGraphics = new PIXI.Graphics();
-      ballGraphics.circle(0, 0, 6).fill(color).stroke({ width: 1, color: 0xffffff });
+      
+      let ballGraphics = new PIXI.Graphics();
+      
+      // Use loaded texture or fallback to color
+      if (texturesRef.current.length > 0) {
+        const texture = texturesRef.current[i % texturesRef.current.length];
+        ballGraphics.circle(0, 0, 24).fill({ texture }).stroke({ width: 2, color: 0xffffff });
+      } else {
+        ballGraphics.circle(0, 0, 24).fill(color).stroke({ width: 2, color: 0xffffff });
+      }
+      
+      // Создаем индикатор лидера (желтый треугольник)
+      const indicator = new PIXI.Graphics();
+      indicator.moveTo(0, -15).lineTo(-10, 5).lineTo(10, 5).closePath();
+      indicator.fill(0xFFD700).stroke({ width: 2, color: 0xFFA500 });
+      indicator.visible = false;
       
       const startX = 400 + (rng() - 0.5) * 20;
       const startY = 100;
       ballGraphics.position.set(startX, startY);
+      indicator.position.set(startX, startY - 40);
+      
       app.stage.addChild(ballGraphics);
+      app.stage.addChild(indicator);
 
       newBalls.push({
         id: `${seed}_${i}`,
@@ -457,7 +349,8 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
         graphics: ballGraphics,
         color,
         playerId: `player_${i + 1}`,
-        finished: false
+        finished: false,
+        indicator: indicator
       });
     }
 
@@ -467,7 +360,7 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
 
   const dropBall = (playerId: string = 'player1') => {
     const seed = inputSeed || Date.now().toString();
-    startRound(50, seed);
+    startRound(playerCount, seed);
   };
 
   const resetGame = () => {
@@ -475,6 +368,9 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
 
     ballsRef.current.forEach(ball => {
       app.stage.removeChild(ball.graphics);
+      if (ball.indicator) {
+        app.stage.removeChild(ball.indicator);
+      }
     });
     ballsRef.current = [];
     setActualWinners([]);
@@ -483,61 +379,94 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
   };
 
   return (
-    <div className={`relative ${className}`}>
-      {/* Seed Input */}
-      <div className="absolute top-4 left-4 z-10">
-        <input
-          type="text"
-          placeholder="Введите сид"
-          value={inputSeed}
-          onChange={(e) => setInputSeed(e.target.value)}
-          className="px-3 py-2 bg-gray-800 text-white rounded border border-gray-600 text-sm"
-        />
-      </div>
-
-      <div ref={canvasRef} className="rounded-xl overflow-hidden shadow-glow" />
-      
-      {/* Game Controls */}
-      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-3">
-        <button
-          onClick={() => dropBall()}
-          className="btn-gaming"
-          disabled={gameState === 'playing'}
-        >
-          Бросить шарик
-        </button>
+    <div className={`flex gap-4 ${className}`}>
+      {/* Game Canvas */}
+      <div className="relative">
+        <div ref={canvasRef} className="rounded-xl overflow-hidden shadow-glow" />
         
-        {gameState === 'finished' && (
+        {/* Game Controls */}
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-3">
           <button
-            onClick={resetGame}
-            className="btn-gaming-secondary"
+            onClick={() => dropBall()}
+            className="btn-gaming"
+            disabled={gameState === 'playing'}
           >
-            Новая игра
+            Бросить шарик
           </button>
-        )}
-      </div>
-
-      {/* Game Status */}
-      <div className="absolute top-4 left-1/2 transform -translate-x-1/2">
-        <div className="card-gaming px-4 py-2">
-          {gameSeed && !inputSeed && (
-            <p className="text-center text-sm text-gray-300 mt-1">
-              Сид: {gameSeed}
-            </p>
+          
+          {gameState === 'finished' && (
+            <button
+              onClick={resetGame}
+              className="btn-gaming-secondary"
+            >
+              Новая игра
+            </button>
           )}
         </div>
       </div>
 
-      {/* Winners Display */}
-      {actualWinners.length > 0 && (
-        <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2">
-          <div className="card-gaming px-4 py-2">
-            <p className="text-center font-bold text-green-400">
-              Победители: {actualWinners.join(', ')}
-            </p>
+      {/* Side Panel */}
+      <div className="flex flex-col gap-4 w-64">
+        {/* Controls */}
+        <div className="card-gaming p-4">
+          <h3 className="text-lg font-bold mb-3">Настройки</h3>
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1">Сид</label>
+              <input
+                type="text"
+                placeholder="Введите сид"
+                value={inputSeed}
+                onChange={(e) => setInputSeed(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-800 text-white rounded border border-gray-600 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Карта</label>
+              <select
+                value={selectedMapId}
+                onChange={(e) => setSelectedMapId(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-800 text-white rounded border border-gray-600 text-sm"
+              >
+                {AVAILABLE_MAPS.map(map => (
+                  <option key={map.id} value={map.id}>{map.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Количество игроков</label>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={playerCount}
+                onChange={(e) => setPlayerCount(Number(e.target.value))}
+                className="w-full px-3 py-2 bg-gray-800 text-white rounded border border-gray-600 text-sm"
+              />
+            </div>
           </div>
         </div>
-      )}
+
+        {/* Game Status */}
+        {gameSeed && (
+          <div className="card-gaming p-4">
+            <h3 className="text-lg font-bold mb-2">Статус игры</h3>
+            <p className="text-sm text-gray-300">
+              Сид: {gameSeed}
+            </p>
+          </div>
+        )}
+
+        {/* Winners Display */}
+        {actualWinners.length > 0 && (
+          <div className="card-gaming p-4">
+            <h3 className="text-lg font-bold mb-2">Победители</h3>
+            <p className="text-green-400 font-medium">
+              {actualWinners.join(', ')}
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
