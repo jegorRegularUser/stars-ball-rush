@@ -39,18 +39,34 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
   const spinnersRef = useRef<Spinner[]>([]);
   const [gameState, setGameState] = useState<'waiting' | 'spinning' | 'playing' | 'finished'>('waiting');
   const [cameraY, setCameraY] = useState(0);
+  const [gameSeed, setGameSeed] = useState<string>('');
+  const [inputSeed, setInputSeed] = useState<string>('');
+  const [actualWinners, setActualWinners] = useState<string[]>([]);
   const gateRef = useRef<Matter.Body | null>(null);
   const gateGraphicsRef = useRef<PIXI.Graphics | null>(null);
+  const actualWinnersRef = useRef<string[]>([]);
+  
+  // Seeded random number generator
+  const seededRandom = (seed: string, index: number) => {
+    let hash = 0;
+    const str = seed + index.toString();
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash % 1000) / 1000;
+  };
 
   // Initialize PIXI and Matter.js
   useEffect(() => {
-    if (!canvasRef.current) return;
+    if (!canvasRef.current || canvasRef.current.firstChild) return;
 
     const initGame = async () => {
-      // Create PIXI Application
+      // Create PIXI Application with mobile-friendly width
       const pixiApp = new PIXI.Application();
       await pixiApp.init({
-        width: 360,
+        width: 450,
         height: 640,
         backgroundColor: 0x1a1a2e,
         antialias: true,
@@ -58,41 +74,41 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
 
       canvasRef.current!.appendChild(pixiApp.canvas);
 
-      // Create Matter.js engine
+      // Create Matter.js engine with deterministic settings
       const matterEngine = Matter.Engine.create();
-      matterEngine.world.gravity.y = 0.8;
+      matterEngine.world.gravity.y = 0.6;
+      matterEngine.timing.timeScale = 1;
+      matterEngine.timing.isFixed = true;
 
-      // Create boundaries
-      const ground = Matter.Bodies.rectangle(180, 630, 360, 20, { 
+      // Create side walls
+      const leftWall = Matter.Bodies.rectangle(10, 1600, 20, 3200, { 
+        isStatic: true,
+        render: { fillStyle: '#16213e' }
+      });
+      const rightWall = Matter.Bodies.rectangle(790, 1600, 20, 3200, { 
         isStatic: true,
         render: { fillStyle: '#16213e' }
       });
 
-      // Create destruction zones (red walls)
-      const leftDeathZone = Matter.Bodies.rectangle(30, 400, 20, 600, { 
+      // Create ground
+      const ground = Matter.Bodies.rectangle(400, 3190, 800, 20, { 
         isStatic: true,
-        isSensor: true,
-        render: { fillStyle: '#ff0000' }
-      });
-      const rightDeathZone = Matter.Bodies.rectangle(330, 400, 20, 600, { 
-        isStatic: true,
-        isSensor: true,
-        render: { fillStyle: '#ff0000' }
+        render: { fillStyle: '#16213e' }
       });
 
-      // Draw death zones
-      const leftDeathGraphics = new PIXI.Graphics();
-      leftDeathGraphics.rect(20, 100, 20, 600);
-      leftDeathGraphics.fill(0xff3333);
-      pixiApp.stage.addChild(leftDeathGraphics);
+      // Draw walls
+      const leftWallGraphics = new PIXI.Graphics();
+      leftWallGraphics.rect(0, 0, 20, 3200);
+      leftWallGraphics.fill(0x16213e);
+      pixiApp.stage.addChild(leftWallGraphics);
 
-      const rightDeathGraphics = new PIXI.Graphics();
-      rightDeathGraphics.rect(320, 100, 20, 600);
-      rightDeathGraphics.fill(0xff3333);
-      pixiApp.stage.addChild(rightDeathGraphics);
+      const rightWallGraphics = new PIXI.Graphics();
+      rightWallGraphics.rect(780, 0, 20, 3200);
+      rightWallGraphics.fill(0x16213e);
+      pixiApp.stage.addChild(rightWallGraphics);
 
       // Create gate (initially closed)
-      const gate = Matter.Bodies.rectangle(180, 120, 100, 10, {
+      const gate = Matter.Bodies.rectangle(400, 150, 200, 15, {
         isStatic: true,
         render: { fillStyle: '#666666' }
       });
@@ -100,26 +116,26 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
 
       // Draw gate
       const gateGraphics = new PIXI.Graphics();
-      gateGraphics.rect(130, 115, 100, 10);
+      gateGraphics.rect(300, 142, 200, 15);
       gateGraphics.fill(0x666666);
       gateGraphicsRef.current = gateGraphics;
       pixiApp.stage.addChild(gateGraphics);
 
-      // СЕКЦИЯ 1: Первый уровень препятствий (кирпичики)
+      // СЕКЦИЯ 1: Первый уровень препятствий (кирпичики) - увеличенная
       const bricks = [];
-      for (let row = 0; row < 4; row++) {
-        for (let col = 0; col < 7; col++) {
-          const x = 70 + col * 35 + (row % 2) * 17;
-          const y = 180 + row * 30;
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 15; col++) {
+          const x = 80 + col * 45 + (row % 2) * 22;
+          const y = 250 + row * 40;
           
-          const brick = Matter.Bodies.rectangle(x, y, 30, 12, {
+          const brick = Matter.Bodies.rectangle(x, y, 40, 15, {
             isStatic: true,
             restitution: 0.9,
             render: { fillStyle: '#8B4513' }
           });
 
           const brickGraphics = new PIXI.Graphics();
-          brickGraphics.roundRect(x - 15, y - 6, 30, 12, 4);
+          brickGraphics.roundRect(x - 20, y - 7, 40, 15, 4);
           brickGraphics.fill(0x8B4513);
           brickGraphics.stroke({ width: 1, color: 0x654321 });
           pixiApp.stage.addChild(brickGraphics);
@@ -136,13 +152,13 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
         }
       }
 
-      // СЕКЦИЯ 2: Средний уровень с пинболами
+      // СЕКЦИЯ 2: Средний уровень с пинболами - увеличенная
       const pegs = [];
-      for (let row = 0; row < 3; row++) {
-        for (let col = 0; col < 5; col++) {
-          const x = 90 + col * 40 + (row % 2) * 20;
-          const y = 320 + row * 50;
-          const peg = Matter.Bodies.circle(x, y, 10, {
+      for (let row = 0; row < 6; row++) {
+        for (let col = 0; col < 12; col++) {
+          const x = 100 + col * 55 + (row % 2) * 27;
+          const y = 700 + row * 70;
+          const peg = Matter.Bodies.circle(x, y, 12, {
             isStatic: true,
             restitution: 1.1,
             render: { fillStyle: '#4A90E2' }
@@ -151,25 +167,45 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
 
           // Draw peg
           const pegGraphics = new PIXI.Graphics();
-          pegGraphics.circle(x, y, 10);
+          pegGraphics.circle(x, y, 12);
           pegGraphics.fill(0x4A90E2);
           pegGraphics.stroke({ width: 2, color: 0x357ABD });
           pixiApp.stage.addChild(pegGraphics);
         }
       }
 
-      // СЕКЦИЯ 3: Вращающиеся препятствия (крестики)
+      // СЕКЦИЯ 2.5: Дополнительные препятствия
+      const barriers = [];
+      for (let i = 0; i < 8; i++) {
+        const x = 120 + i * 80;
+        const y = 1100 + (i % 2) * 50;
+        const barrier = Matter.Bodies.rectangle(x, y, 60, 12, {
+          isStatic: true,
+          angle: (i % 2) * Math.PI / 8,
+          restitution: 1.0,
+          render: { fillStyle: '#9B59B6' }
+        });
+        barriers.push(barrier);
+
+        const barrierGraphics = new PIXI.Graphics();
+        barrierGraphics.rect(-30, -6, 60, 12);
+        barrierGraphics.fill(0x9B59B6);
+        barrierGraphics.position.set(x, y);
+        barrierGraphics.rotation = (i % 2) * Math.PI / 8;
+        pixiApp.stage.addChild(barrierGraphics);
+      }
+
+      // СЕКЦИЯ 3: Вращающиеся препятствия (крестики) - увеличенная
       const spinners = [];
       const spinnerPositions = [
-        { x: 100, y: 500 },
-        { x: 180, y: 480 },
-        { x: 260, y: 500 },
-        { x: 140, y: 530 },
-        { x: 220, y: 530 }
+        { x: 150, y: 1400 }, { x: 300, y: 1380 }, { x: 450, y: 1400 }, { x: 600, y: 1380 },
+        { x: 200, y: 1500 }, { x: 350, y: 1480 }, { x: 500, y: 1500 }, { x: 650, y: 1480 },
+        { x: 120, y: 1600 }, { x: 280, y: 1580 }, { x: 420, y: 1600 }, { x: 580, y: 1580 },
+        { x: 180, y: 1700 }, { x: 340, y: 1680 }, { x: 480, y: 1700 }, { x: 620, y: 1680 }
       ];
 
       spinnerPositions.forEach((pos, index) => {
-        const spinner = Matter.Bodies.rectangle(pos.x, pos.y, 40, 8, {
+        const spinner = Matter.Bodies.rectangle(pos.x, pos.y, 60, 12, {
           isStatic: true,
           restitution: 1.3,
           render: { fillStyle: '#FFD700' }
@@ -177,8 +213,8 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
 
         const spinnerGraphics = new PIXI.Graphics();
         // Draw cross shape
-        spinnerGraphics.rect(-20, -4, 40, 8);
-        spinnerGraphics.rect(-4, -20, 8, 40);
+        spinnerGraphics.rect(-30, -6, 60, 12);
+        spinnerGraphics.rect(-6, -30, 12, 60);
         spinnerGraphics.fill(0xFFD700);
         spinnerGraphics.stroke({ width: 2, color: 0xFFA500 });
         spinnerGraphics.position.set(pos.x, pos.y);
@@ -195,72 +231,110 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
         spinnersRef.current.push(spinnerObj);
       });
 
-      // СЕКЦИЯ 4: Финальная зона
-      // Создаем направляющие воронки
-      const funnelLeft = Matter.Bodies.rectangle(150, 600, 60, 8, {
+      // СЕКЦИЯ 4: Последние препятствия
+      const finalPegs = [];
+      for (let row = 0; row < 4; row++) {
+        for (let col = 0; col < 10; col++) {
+          const x = 120 + col * 60 + (row % 2) * 30;
+          const y = 2200 + row * 80;
+          const peg = Matter.Bodies.circle(x, y, 15, {
+            isStatic: true,
+            restitution: 1.2,
+            render: { fillStyle: '#E74C3C' }
+          });
+          finalPegs.push(peg);
+
+          const pegGraphics = new PIXI.Graphics();
+          pegGraphics.circle(x, y, 15);
+          pegGraphics.fill(0xE74C3C);
+          pegGraphics.stroke({ width: 3, color: 0xC0392B });
+          pixiApp.stage.addChild(pegGraphics);
+        }
+      }
+
+      // СЕКЦИЯ 5: Финальная зона
+      // Направляющие воронки
+      const funnelLeft = Matter.Bodies.rectangle(300, 2800, 120, 15, {
         isStatic: true,
-        angle: Math.PI / 6,
+        angle: Math.PI / 8,
         restitution: 0.8,
         render: { fillStyle: '#666666' }
       });
       
-      const funnelRight = Matter.Bodies.rectangle(210, 600, 60, 8, {
+      const funnelRight = Matter.Bodies.rectangle(500, 2800, 120, 15, {
         isStatic: true,
-        angle: -Math.PI / 6,
+        angle: -Math.PI / 8,
         restitution: 0.8,
         render: { fillStyle: '#666666' }
       });
 
       // Draw funnels
       const funnelLeftGraphics = new PIXI.Graphics();
-      funnelLeftGraphics.rect(-30, -4, 60, 8);
+      funnelLeftGraphics.rect(-60, -7, 120, 15);
       funnelLeftGraphics.fill(0x666666);
-      funnelLeftGraphics.position.set(150, 600);
-      funnelLeftGraphics.rotation = Math.PI / 6;
+      funnelLeftGraphics.position.set(300, 2800);
+      funnelLeftGraphics.rotation = Math.PI / 8;
       pixiApp.stage.addChild(funnelLeftGraphics);
 
       const funnelRightGraphics = new PIXI.Graphics();
-      funnelRightGraphics.rect(-30, -4, 60, 8);
+      funnelRightGraphics.rect(-60, -7, 120, 15);
       funnelRightGraphics.fill(0x666666);
-      funnelRightGraphics.position.set(210, 600);
-      funnelRightGraphics.rotation = -Math.PI / 6;
+      funnelRightGraphics.position.set(500, 2800);
+      funnelRightGraphics.rotation = -Math.PI / 8;
       pixiApp.stage.addChild(funnelRightGraphics);
 
       // Победная полоска (центр)
-      const winSlot = Matter.Bodies.rectangle(180, 650, 60, 15, {
+      const winSlot = Matter.Bodies.rectangle(400, 3100, 120, 30, {
         isStatic: true,
         isSensor: true,
         render: { fillStyle: '#00FF00' }
       });
 
+      // Красные зоны смерти (горизонтальные, по бокам от победы)
+      const leftDeathZone = Matter.Bodies.rectangle(200, 3100, 120, 30, {
+        isStatic: true,
+        isSensor: true,
+        render: { fillStyle: '#ff0000' }
+      });
+      const rightDeathZone = Matter.Bodies.rectangle(600, 3100, 120, 30, {
+        isStatic: true,
+        isSensor: true,
+        render: { fillStyle: '#ff0000' }
+      });
+
       // Draw winning slot
       const winSlotGraphics = new PIXI.Graphics();
-      winSlotGraphics.roundRect(150, 642, 60, 15, 8);
+      winSlotGraphics.roundRect(340, 3085, 120, 30, 15);
       winSlotGraphics.fill(0x00FF00);
-      winSlotGraphics.stroke({ width: 3, color: 0x00AA00 });
+      winSlotGraphics.stroke({ width: 4, color: 0x00AA00 });
       pixiApp.stage.addChild(winSlotGraphics);
 
-      // Add pulsing glow effect to win slot
-      const winGlowGraphics = new PIXI.Graphics();
-      winGlowGraphics.roundRect(145, 637, 70, 25, 12);
-      winGlowGraphics.fill({ color: 0x00FF00, alpha: 0.3 });
-      pixiApp.stage.addChild(winGlowGraphics);
+      // Draw death zones
+      const leftDeathGraphics = new PIXI.Graphics();
+      leftDeathGraphics.roundRect(140, 3085, 120, 30, 15);
+      leftDeathGraphics.fill(0xff3333);
+      pixiApp.stage.addChild(leftDeathGraphics);
+
+      const rightDeathGraphics = new PIXI.Graphics();
+      rightDeathGraphics.roundRect(540, 3085, 120, 30, 15);
+      rightDeathGraphics.fill(0xff3333);
+      pixiApp.stage.addChild(rightDeathGraphics);
 
       // Add win text
       const winText = new PIXI.Text({
         text: 'ПОБЕДА!',
         style: {
-          fontSize: 14,
+          fontSize: 24,
           fill: 0x000000,
           fontWeight: 'bold'
         }
       });
       winText.anchor.set(0.5);
-      winText.position.set(180, 650);
+      winText.position.set(400, 3100);
       pixiApp.stage.addChild(winText);
 
       // Add all bodies to world
-      Matter.World.add(matterEngine.world, [ground, leftDeathZone, rightDeathZone, gate, ...bricks, ...pegs, ...spinners, funnelLeft, funnelRight, winSlot]);
+      Matter.World.add(matterEngine.world, [ground, leftWall, rightWall, leftDeathZone, rightDeathZone, gate, ...bricks, ...pegs, ...barriers, ...spinners, ...finalPegs, funnelLeft, funnelRight, winSlot]);
 
       // Setup collision detection
       Matter.Events.on(matterEngine, 'collisionStart', (event) => {
@@ -270,9 +344,24 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
           // Check if ball hits winning slot
           if ((bodyA === winSlot || bodyB === winSlot)) {
             const ball = ballsRef.current.find(b => b.body === bodyA || b.body === bodyB);
-            if (ball && onBallWin) {
-              onBallWin(ball.id, ball.playerId);
-              setGameState('finished');
+            
+            if (ball && !actualWinnersRef.current.includes(ball.id)) {
+              // Add to winners list
+              actualWinnersRef.current = [...actualWinnersRef.current, ball.id];
+              setActualWinners(actualWinnersRef.current);
+              
+              // Remove ball from physics world
+              Matter.World.remove(matterEngine.world, ball.body);
+              ball.body = null as any;
+              
+              if (onBallWin) {
+                onBallWin(ball.id, ball.playerId);
+              }
+              
+              // End game when 3 winners
+              if (actualWinnersRef.current.length >= 3) {
+                setGameState('finished');
+              }
             }
           }
 
@@ -299,23 +388,35 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
         });
       });
 
-      // Animation loop
+      // Animation loop with fixed timestep for deterministic physics
       const gameLoop = () => {
-        Matter.Engine.update(matterEngine);
+        Matter.Engine.update(matterEngine, 16.666); // Fixed 60fps timestep
+        
+        // Scale and center the game field
+        const scale = 385 / 800; // Scale 800px field to fit viewport with padding
+        pixiApp.stage.scale.set(scale);
         
         // Update ball graphics positions and camera follow
         if (ballsRef.current.length > 0) {
           const activeBalls = ballsRef.current.filter(ball => ball.body && !ball.isSpinning);
           if (activeBalls.length > 0) {
-            const firstBall = activeBalls[0];
-            const targetCameraY = Math.max(0, Math.min(400, firstBall.body.position.y - 200));
+            // Find ball closest to victory (highest Y position)
+            const leadingBall = activeBalls.reduce((leader, ball) => 
+              ball.body.position.y > leader.body.position.y ? ball : leader
+            );
+            const targetCameraY = Math.max(0, Math.min(2200 * scale, leadingBall.body.position.y * scale - 320));
             
-            // Smooth camera movement
+            // Smooth camera movement (only vertical, horizontally centered)
             const currentCameraY = -pixiApp.stage.y;
-            const newCameraY = currentCameraY + (targetCameraY - currentCameraY) * 0.02;
+            const newCameraY = currentCameraY + (targetCameraY - currentCameraY) * 0.03;
             setCameraY(newCameraY);
             pixiApp.stage.y = -newCameraY;
+            pixiApp.stage.x = 0; // Keep horizontally centered
           }
+        } else {
+          // Default position when no balls
+          pixiApp.stage.x = 0;
+          pixiApp.stage.y = 0;
         }
         
         // Update ball graphics positions
@@ -323,10 +424,10 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
           if (gameState === 'spinning' || ball.isSpinning) {
             // Spinning animation - balls rotate around center
             const angle = (Date.now() * 0.005) + (index * (Math.PI * 2) / ballsRef.current.length);
-            const radius = 40;
+            const radius = 80;
             ball.graphics.position.set(
-              180 + Math.cos(angle) * radius,
-              80 + Math.sin(angle) * radius * 0.3
+              400 + Math.cos(angle) * radius,
+              100 + Math.sin(angle) * radius * 0.3
             );
             ball.graphics.rotation += 0.15;
           } else if (ball.body) {
@@ -355,11 +456,20 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
       if (app) {
         app.destroy(true);
       }
+      if (canvasRef.current && canvasRef.current.firstChild) {
+        canvasRef.current.removeChild(canvasRef.current.firstChild);
+      }
     };
   }, []);
 
-  const startRound = (playerCount: number = 3) => {
+  const startRound = (playerCount: number = 50, seed: string = Date.now().toString()) => {
     if (!app || !engine) return;
+
+    setGameSeed(seed);
+    
+    // Clear winners
+    setActualWinners([]);
+    actualWinnersRef.current = [];
 
     // Reset physics bodies for balls
     ballsRef.current.forEach(ball => {
@@ -368,28 +478,26 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
       }
     });
 
-    const colors = [0xff6b6b, 0x4ecdc4, 0x45b7d1, 0xf9ca24, 0xf0932b, 0xeb4d4b];
+    const colors = [0xff6b6b, 0x4ecdc4, 0x45b7d1, 0xf9ca24, 0xf0932b, 0xeb4d4b, 0x9b59b6, 0xe67e22, 0x2ecc71, 0x34495e];
     const newBalls: Ball[] = [];
 
-    // Create multiple balls for round
+    // Create many small balls for multiplayer simulation
     for (let i = 0; i < playerCount; i++) {
       const color = colors[i % colors.length];
       
-      // Create ball graphics only (no physics body yet)
+      // Create smaller ball graphics
       const ballGraphics = new PIXI.Graphics();
-      ballGraphics.circle(0, 0, 12);
+      ballGraphics.circle(0, 0, 6);
       ballGraphics.fill(color);
-      ballGraphics.stroke({ width: 2, color: 0xffffff });
+      ballGraphics.stroke({ width: 1, color: 0xffffff });
       
-      // Add glow effect
-      ballGraphics.stroke({ width: 3, color: 0xffffff, alpha: 0.8 });
-      ballGraphics.position.set(180, 80);
+      ballGraphics.position.set(400, 100);
 
       app.stage.addChild(ballGraphics);
 
       const ballObj: Ball = {
-        id: `ball_${Date.now()}_${i}`,
-        body: null as any, // Will be created after spinning
+        id: `${seed}_${i}`,
+        body: null as any,
         graphics: ballGraphics,
         color,
         playerId: `player_${i + 1}`,
@@ -402,16 +510,18 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
     ballsRef.current = newBalls;
     setGameState('spinning');
 
-    // Start spinning phase for 3 seconds
     setTimeout(() => {
-      // Create physics bodies and open gate
       ballsRef.current.forEach((ball, index) => {
-        const x = 150 + index * 20 + (Math.random() - 0.5) * 10;
-        const physicsBody = Matter.Bodies.circle(x, 80, 12, {
-          restitution: 0.8,
-          friction: 0.001,
-          frictionAir: 0.01,
-          density: 0.001
+        const angle = (index / ballsRef.current.length) * Math.PI * 2;
+        const radius = 60 + seededRandom(seed, index * 100) * 40;
+        const x = 400 + Math.cos(angle) * radius;
+        const y = 100 + Math.sin(angle) * 20;
+        
+        const physicsBody = Matter.Bodies.circle(x, y, 6, {
+          restitution: 0.7 + seededRandom(seed, index * 200) * 0.2,
+          friction: 0.002 + seededRandom(seed, index * 300) * 0.001,
+          frictionAir: 0.008 + seededRandom(seed, index * 400) * 0.002,
+          density: 0.0008 + seededRandom(seed, index * 500) * 0.0002
         });
 
         ball.body = physicsBody;
@@ -429,17 +539,33 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
 
       setGameState('playing');
 
-      // Reset balls after timeout
+      // Game timeout - ensure game ends after 45 seconds
       setTimeout(() => {
         if (gameState !== 'finished') {
-          resetGame();
+          // If not enough winners, select first 3 balls near finish
+          const remainingBalls = ballsRef.current
+            .filter(ball => ball.body && ball.body.position.y > 3000)
+            .slice(0, 3);
+          
+          remainingBalls.forEach(ball => {
+            if (!actualWinnersRef.current.includes(ball.id)) {
+              actualWinnersRef.current = [...actualWinnersRef.current, ball.id];
+              if (onBallWin) {
+                onBallWin(ball.id, ball.playerId);
+              }
+            }
+          });
+          
+          setActualWinners(actualWinnersRef.current);
+          setGameState('finished');
         }
-      }, 20000);
+      }, 45000);
     }, 3000);
   };
 
   const dropBall = (playerId: string = 'player1') => {
-    startRound(1);
+    const seed = inputSeed || Date.now().toString();
+    startRound(50, seed);
   };
 
   const resetGame = () => {
@@ -450,11 +576,24 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
       app.stage.removeChild(ball.graphics);
     });
     ballsRef.current.length = 0;
+    setActualWinners([]);
+    actualWinnersRef.current = [];
     setGameState('waiting');
   };
 
   return (
     <div className={`relative ${className}`}>
+      {/* Seed Input */}
+      <div className="absolute top-4 left-4 z-10">
+        <input
+          type="text"
+          placeholder="Введите сид"
+          value={inputSeed}
+          onChange={(e) => setInputSeed(e.target.value)}
+          className="px-3 py-2 bg-gray-800 text-white rounded border border-gray-600 text-sm"
+        />
+      </div>
+
       <div ref={canvasRef} className="rounded-xl overflow-hidden shadow-glow" />
       
       {/* Game Controls */}
@@ -462,7 +601,7 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
         <button
           onClick={() => dropBall()}
           className="btn-gaming"
-          disabled={gameState === 'finished'}
+          disabled={gameState === 'playing' || gameState === 'spinning'}
         >
           Бросить шарик
         </button>
@@ -480,14 +619,24 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
       {/* Game Status */}
       <div className="absolute top-4 left-1/2 transform -translate-x-1/2">
         <div className="card-gaming px-4 py-2">
-          <p className="text-center font-bold">
-            {gameState === 'waiting' && 'Готов к игре'}
-            {gameState === 'spinning' && 'Шарики раскручиваются...'}
-            {gameState === 'playing' && 'Игра идёт...'}
-            {gameState === 'finished' && 'Игра завершена!'}
-          </p>
+          {gameSeed && !inputSeed && (
+            <p className="text-center text-sm text-gray-300 mt-1">
+              Сид: {gameSeed}
+            </p>
+          )}
         </div>
       </div>
+
+      {/* Winners Display */}
+      {actualWinners.length > 0 && (
+        <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2">
+          <div className="card-gaming px-4 py-2">
+            <p className="text-center font-bold text-green-400">
+              Победители: {actualWinners.join(', ')}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
