@@ -21,6 +21,7 @@ interface Obstacle {
   type: 'peg' | 'brick' | 'spinner' | 'barrier';
   rotation?: number;
   destroyed?: boolean;
+  graphics?: PIXI.Graphics;
 }
 
 interface Spinner {
@@ -86,8 +87,7 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
       // Create walls (for collision detection)
       obstacles.push(
         { x: 10, y: 1600, width: 20, height: 3200, type: 'barrier' },
-        { x: 790, y: 1600, width: 20, height: 3200, type: 'barrier' },
-        { x: 400, y: 3190, width: 800, height: 20, type: 'barrier' }
+        { x: 790, y: 1600, width: 20, height: 3200, type: 'barrier' }
       );
 
       // Draw walls
@@ -113,13 +113,13 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
           const x = 80 + col * 45 + (row % 2) * 22;
           const y = 250 + row * 40;
           
-          obstacles.push({ x, y, width: 40, height: 15, type: 'brick', destroyed: false });
-
           const brickGraphics = new PIXI.Graphics();
           brickGraphics.roundRect(x - 20, y - 7, 40, 15, 4);
           brickGraphics.fill(0x8B4513);
           brickGraphics.stroke({ width: 1, color: 0x654321 });
           pixiApp.stage.addChild(brickGraphics);
+          
+          obstacles.push({ x, y, width: 40, height: 15, type: 'brick', destroyed: false, graphics: brickGraphics });
         }
       }
 
@@ -139,20 +139,25 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
         }
       }
 
-      // СЕКЦИЯ 2.5: Дополнительные препятствия
-      for (let i = 0; i < 8; i++) {
-        const x = 120 + i * 80;
-        const y = 1100 + (i % 2) * 50;
+      // СЕКЦИЯ 2.5: Лабиринт
+      const mazeBarriers = [
+        { x: 100, y: 1100, width: 80, height: 15 },
+        { x: 300, y: 1150, width: 80, height: 15 },
+        { x: 150, y: 1200, width: 80, height: 15 },
+        { x: 350, y: 1250, width: 80, height: 15 },
+        { x: 120, y: 1300, width: 80, height: 15 },
+        { x: 320, y: 1350, width: 80, height: 15 }
+      ];
+      
+      mazeBarriers.forEach(barrier => {
+        obstacles.push({ x: barrier.x, y: barrier.y, width: barrier.width, height: barrier.height, type: 'barrier' });
         
-        obstacles.push({ x, y, width: 60, height: 12, type: 'barrier', rotation: (i % 2) * Math.PI / 8 });
-
         const barrierGraphics = new PIXI.Graphics();
-        barrierGraphics.rect(-30, -6, 60, 12);
+        barrierGraphics.roundRect(barrier.x - barrier.width/2, barrier.y - barrier.height/2, barrier.width, barrier.height, 4);
         barrierGraphics.fill(0x9B59B6);
-        barrierGraphics.position.set(x, y);
-        barrierGraphics.rotation = (i % 2) * Math.PI / 8;
+        barrierGraphics.stroke({ width: 2, color: 0x7B4397 });
         pixiApp.stage.addChild(barrierGraphics);
-      }
+      });
 
       // СЕКЦИЯ 3: Вращающиеся препятствия (крестики)
       const spinnerPositions = [
@@ -197,26 +202,21 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
         }
       }
 
-      // СЕКЦИЯ 5: Финальная зона
-      obstacles.push(
-        { x: 300, y: 2800, width: 120, height: 15, type: 'barrier', rotation: Math.PI / 8 },
-        { x: 500, y: 2800, width: 120, height: 15, type: 'barrier', rotation: -Math.PI / 8 }
-      );
-
-      // Draw funnels
-      const funnelLeftGraphics = new PIXI.Graphics();
-      funnelLeftGraphics.rect(-60, -7, 120, 15);
-      funnelLeftGraphics.fill(0x666666);
-      funnelLeftGraphics.position.set(300, 2800);
-      funnelLeftGraphics.rotation = Math.PI / 8;
-      pixiApp.stage.addChild(funnelLeftGraphics);
-
-      const funnelRightGraphics = new PIXI.Graphics();
-      funnelRightGraphics.rect(-60, -7, 120, 15);
-      funnelRightGraphics.fill(0x666666);
-      funnelRightGraphics.position.set(500, 2800);
-      funnelRightGraphics.rotation = -Math.PI / 8;
-      pixiApp.stage.addChild(funnelRightGraphics);
+      // СЕКЦИЯ 5: Финальная зона (воронки как барьеры)
+      const funnelBarriers = [
+        { x: 250, y: 2850, width: 120, height: 20 },
+        { x: 550, y: 2850, width: 120, height: 20 }
+      ];
+      
+      funnelBarriers.forEach(funnel => {
+        obstacles.push({ x: funnel.x, y: funnel.y, width: funnel.width, height: funnel.height, type: 'barrier' });
+        
+        const funnelGraphics = new PIXI.Graphics();
+        funnelGraphics.roundRect(funnel.x - funnel.width/2, funnel.y - funnel.height/2, funnel.width, funnel.height, 4);
+        funnelGraphics.fill(0x666666);
+        funnelGraphics.stroke({ width: 3, color: 0x444444 });
+        pixiApp.stage.addChild(funnelGraphics);
+      });
 
       // Store obstacles reference
       obstaclesRef.current = obstacles;
@@ -230,12 +230,12 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
 
       // Draw death zones
       const leftDeathGraphics = new PIXI.Graphics();
-      leftDeathGraphics.roundRect(140, 3085, 120, 30, 15);
+      leftDeathGraphics.roundRect(30, 3185, 520, 30, 15);
       leftDeathGraphics.fill(0xff3333);
       pixiApp.stage.addChild(leftDeathGraphics);
 
       const rightDeathGraphics = new PIXI.Graphics();
-      rightDeathGraphics.roundRect(540, 3085, 120, 30, 15);
+      rightDeathGraphics.roundRect(540, 3185, 230, 30, 15);
       rightDeathGraphics.fill(0xff3333);
       pixiApp.stage.addChild(rightDeathGraphics);
 
@@ -262,41 +262,80 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
           // Apply gravity
           ball.dy += 0.1;
           
+          // Store previous position
+          const prevX = ball.x;
+          const prevY = ball.y;
+          
           // Update position
           ball.x += ball.dx;
           ball.y += ball.dy;
           
           // Check collisions with obstacles
+          let collided = false;
           obstaclesRef.current.forEach(obstacle => {
-            if (obstacle.destroyed) return;
+            if (obstacle.destroyed || collided) return;
             
             const dx = ball.x - obstacle.x;
             const dy = ball.y - obstacle.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
             
             if (obstacle.type === 'peg' && distance < 18) {
-              // Bounce off peg with random direction
-              const bounce = (rngRef.current!() - 0.5) * 4;
-              ball.dx = bounce;
-              ball.dy *= 0.8;
+              // Bounce off peg - push ball away and add random bounce
+              const angle = Math.atan2(dy, dx);
+              ball.x = obstacle.x + Math.cos(angle) * 18;
+              ball.y = obstacle.y + Math.sin(angle) * 18;
+              
+              const bounce = (rngRef.current!() - 0.5) * 3;
+              ball.dx = Math.cos(angle) * 2 + bounce;
+              ball.dy = Math.abs(ball.dy) * 0.7;
+              collided = true;
             } else if (obstacle.type === 'brick' && 
                       Math.abs(dx) < obstacle.width / 2 && 
                       Math.abs(dy) < obstacle.height / 2) {
-              // Hit brick - bounce and destroy
+              // Hit brick - bounce back and destroy
               obstacle.destroyed = true;
-              ball.dy *= -0.5;
+              if (obstacle.graphics) {
+                pixiApp.stage.removeChild(obstacle.graphics);
+              }
+              ball.x = prevX;
+              ball.y = prevY;
+              ball.dy *= -0.6;
               ball.dx += (rngRef.current!() - 0.5) * 2;
+              collided = true;
             } else if (obstacle.type === 'spinner' && distance < 35) {
-              // Hit spinner - strong bounce
-              const bounce = (rngRef.current!() - 0.5) * 6;
-              ball.dx = bounce;
-              ball.dy *= 0.7;
+              // Hit spinner - strong bounce away
+              const angle = Math.atan2(dy, dx);
+              ball.x = obstacle.x + Math.cos(angle) * 35;
+              ball.y = obstacle.y + Math.sin(angle) * 35;
+              
+              const bounce = (rngRef.current!() - 0.5) * 5;
+              ball.dx = Math.cos(angle) * 3 + bounce;
+              ball.dy = Math.abs(ball.dy) * 0.6;
+              collided = true;
+            } else if (obstacle.type === 'barrier' && 
+                      Math.abs(dx) < obstacle.width / 2 && 
+                      Math.abs(dy) < obstacle.height / 2) {
+              // Hit barrier - proper bounce with surface normal
+              const overlapX = obstacle.width / 2 - Math.abs(dx);
+              const overlapY = obstacle.height / 2 - Math.abs(dy);
+              
+              if (overlapX < overlapY) {
+                // Hit from side
+                ball.x = dx > 0 ? obstacle.x + obstacle.width / 2 + 6 : obstacle.x - obstacle.width / 2 - 6;
+                ball.dx = -ball.dx * 0.8 + (rngRef.current!() - 0.5) * 1;
+              } else {
+                // Hit from top/bottom
+                ball.y = dy > 0 ? obstacle.y + obstacle.height / 2 + 6 : obstacle.y - obstacle.height / 2 - 6;
+                ball.dy = -ball.dy * 0.8;
+                ball.dx += (rngRef.current!() - 0.5) * 1;
+              }
+              collided = true;
             }
           });
           
           // Boundary checks
-          if (ball.x < 30) { ball.x = 30; ball.dx *= -0.5; }
-          if (ball.x > 770) { ball.x = 770; ball.dx *= -0.5; }
+          if (ball.x < 30) { ball.x = 30; ball.dx = Math.abs(ball.dx) * 0.5; }
+          if (ball.x > 420) { ball.x = 420; ball.dx = -Math.abs(ball.dx) * 0.5; }
           
           // Check win/death zones
           if (ball.y > 3085 && ball.y < 3115) {
@@ -313,11 +352,13 @@ export const GameCanvas = ({ onBallWin, className }: GameCanvasProps) => {
               if (actualWinnersRef.current.length >= 3) {
                 setGameState('finished');
               }
-            } else if ((ball.x > 140 && ball.x < 260) || (ball.x > 540 && ball.x < 660)) {
-              // Death zones - remove ball
-              ball.finished = true;
-              pixiApp.stage.removeChild(ball.graphics);
             }
+          }
+          
+          // Death zones - instant destruction on red lines
+          if (ball.y > 3185 && ball.y < 3215) {
+            ball.finished = true;
+            pixiApp.stage.removeChild(ball.graphics);
           }
           
           // Update graphics
